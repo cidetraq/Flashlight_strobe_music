@@ -26,7 +26,7 @@ import kotlinx.coroutines.NonCancellable.cancel
 import kotlin.concurrent.thread
 import kotlin.coroutines.suspendCoroutine
 
-class backgroundAudioAnalysis(val cameraID: String, val cameraManager: CameraManager, val noiseRecorder: NoiseRecorder, var running: Boolean = false) {
+class backgroundAudioAnalysis(val cameraID: String, val cameraManager: CameraManager, val noiseRecorder: NoiseRecorder, var running: Boolean) {
     @RequiresApi(Build.VERSION_CODES.M)
     fun torchOn() {
         cameraManager.setTorchMode(cameraID, true)
@@ -50,6 +50,7 @@ class backgroundAudioAnalysis(val cameraID: String, val cameraManager: CameraMan
 
     @RequiresApi(Build.VERSION_CODES.M)
     fun runContinuous() {
+        running = true
         var job = audioCoroutine.launch {
             while (running) {
                 Thread.sleep(300L)
@@ -63,8 +64,8 @@ class backgroundAudioAnalysis(val cameraID: String, val cameraManager: CameraMan
 
     fun cancelJob() {
         audioCoroutine.cancel()
-        running = false
         println("audioCoroutine.cancel() called")
+        running = false
         audioCoroutine = CoroutineScope(Dispatchers.Default)
     }
 }
@@ -182,55 +183,16 @@ class MainActivity() : AppCompatActivity() {
         var noiseRecorder = NoiseRecorder(auRecorder, auRecordByteArray.size)
         cameraID = cameraManager.cameraIdList[0]
         toggle = findViewById(R.id.torchToggle)
-        val bgAudio = backgroundAudioAnalysis(cameraID,cameraManager,noiseRecorder,false)
+        val bgAudio = backgroundAudioAnalysis(cameraID,cameraManager,noiseRecorder, false)
         toggle.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked)
             {
-                bgAudio.running=true
                 bgAudio.runContinuous()
             }
             else {
                 bgAudio.cancelJob()
             }
-
             }}
-
-
-//
-//    @RequiresApi(Build.VERSION_CODES.M)
-//    suspend fun threadManager(cameraManager: CameraManager, noiseRecorder: NoiseRecorder) {
-//        var toggleWrapperJob = coroutineScope {
-//            var job = launch {
-//                println("I'm working in thread ${Thread.currentThread().name}")
-//                while (true) {
-//                    runOneCycle(cameraManager, noiseRecorder)
-//                    Thread.sleep(500L)
-//                    if (Thread.interrupted())
-//                        break
-//                }
-//            }
-//        }
-//    }
-//
-//    @RequiresApi(Build.VERSION_CODES.M)
-//    fun runOneCycle(cameraManager: CameraManager, noiseRecorder:NoiseRecorder) {
-//            var noiseLevel = noiseRecorder.noiseLevel
-//            if (noiseLevel > 40.0)
-//                torchOn(cameraManager)
-//            else
-//                torchOff(cameraManager)
-//    }
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    fun torchOn(cameraManager: CameraManager) {
-        cameraManager.setTorchMode(cameraID, true)
-    }
-
-    @RequiresApi(Build.VERSION_CODES.M)
-    fun torchOff(cameraManager: CameraManager) {
-        cameraManager.setTorchMode(cameraID, false)
-    }
-
 
 }
 

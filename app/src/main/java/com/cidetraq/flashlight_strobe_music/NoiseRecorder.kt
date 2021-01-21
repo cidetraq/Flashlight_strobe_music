@@ -22,9 +22,10 @@ class NoiseRecorder(audioRecord: AudioRecord, buffSize: Int) {
 //
 //        bufferSize = AudioRecord.getMinBufferSize(44100, AudioFormat.CHANNEL_IN_DEFAULT,AudioFormat.ENCODING_PCM_16BIT);
             //making the buffer bigger....
-            bufferSize = bufferSize * 4
+//            bufferSize = bufferSize * 4
             //        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
 //                44100, AudioFormat.CHANNEL_IN_DEFAULT, AudioFormat.ENCODING_PCM_16BIT, bufferSize);
+            bufferSize *= 4
             val data = ShortArray(bufferSize)
             var average = 0.0
             println(TAG + "start new recording process")
