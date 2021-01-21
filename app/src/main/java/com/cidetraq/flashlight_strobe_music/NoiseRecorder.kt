@@ -1,10 +1,13 @@
 package com.cidetraq.flashlight_strobe_music
 
 import android.media.AudioRecord
+import kotlin.math.abs
 
-class NoiseRecorder(audioRecord: AudioRecord, buffSize: Int) {
-    var recorder: AudioRecord
+class NoiseRecorder(audioRecord: AudioRecord, val buffSize: Int, buffMultiplier: Int) {
+    var buffMultiplierLocal = 0
     var bufferSize = 0
+    var origBufferSize = buffSize
+    var recorder: AudioRecord
     private val TAG =
         "EXTERNALCODE - "//the value 51805.5336 can be derived from asuming that x=32767=0.6325 Pa and x=1 = 0.00002 Pa (the reference value)
 
@@ -13,6 +16,8 @@ class NoiseRecorder(audioRecord: AudioRecord, buffSize: Int) {
     //making the buffer bigger....
     //        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
 //                44100, AudioFormat.CHANNEL_IN_DEFAULT, AudioFormat.ENCODING_PCM_16BIT, bufferSize);
+    var bytesElapsedOnce = 0
+    var bytesElapsedTotal = 0
     @get:Throws(NoValidNoiseLevelException::class)
     val noiseLevel: Double
         //x=max;
@@ -25,22 +30,31 @@ class NoiseRecorder(audioRecord: AudioRecord, buffSize: Int) {
 //            bufferSize = bufferSize * 4
             //        AudioRecord recorder = new AudioRecord(MediaRecorder.AudioSource.MIC,
 //                44100, AudioFormat.CHANNEL_IN_DEFAULT, AudioFormat.ENCODING_PCM_16BIT, bufferSize);
-            bufferSize *= 4
+            println("bufferSize start of get() : "+bufferSize)
+            bufferSize = origBufferSize
+            bufferSize *= buffMultiplierLocal
+            println("bufferSize after start of get() : "+bufferSize)
+
             val data = ShortArray(bufferSize)
             var average = 0.0
             println(TAG + "start new recording process")
             recorder.startRecording()
+            println("in NoiseRecorder : bytesElapsedTotal : "+bytesElapsedTotal )
+//            val bytesElapsedTotalShorts = bytesElapsedTotal.toShort()
             recorder.read(data, 0, bufferSize)
             recorder.stop()
             println(TAG + "stop recording process")
             for (s in data) {
                 if (s > 0) {
-                    average += Math.abs(s.toInt()).toDouble()
+                    average += abs(s.toInt()).toDouble()
                 } else {
                     bufferSize--
                 }
             }
             //x=max;
+            println("bufferSize: " +bufferSize)
+            bytesElapsedOnce = bufferSize
+            bytesElapsedTotal += bytesElapsedOnce
             val x = average / bufferSize
             println(TAG + "" + x)
 //            recorder.release()
@@ -70,6 +84,8 @@ class NoiseRecorder(audioRecord: AudioRecord, buffSize: Int) {
 
     init {
         bufferSize = buffSize
+        origBufferSize = bufferSize
         recorder = audioRecord
+        buffMultiplierLocal = buffMultiplier
     }
 }

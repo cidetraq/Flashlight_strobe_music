@@ -27,6 +27,8 @@ import kotlin.concurrent.thread
 import kotlin.coroutines.suspendCoroutine
 
 class backgroundAudioAnalysis(val cameraID: String, val cameraManager: CameraManager, val noiseRecorder: NoiseRecorder, var running: Boolean) {
+
+    var buffer = 0
     @RequiresApi(Build.VERSION_CODES.M)
     fun torchOn() {
         cameraManager.setTorchMode(cameraID, true)
@@ -55,6 +57,7 @@ class backgroundAudioAnalysis(val cameraID: String, val cameraManager: CameraMan
             while (running) {
                 Thread.sleep(300L)
                 runOneCycle()
+                buffer += noiseRecorder.bytesElapsedOnce
             }
             torchOff()
             println("torchOff() called in runContinuous()")
@@ -180,7 +183,8 @@ class MainActivity() : AppCompatActivity() {
         ).build()
         var auRecordByteArray = ByteArray(bufferSize)
         var audioTrack = AudioTrack.Builder().build()
-        var noiseRecorder = NoiseRecorder(auRecorder, auRecordByteArray.size)
+        var noiseRecorder = NoiseRecorder(auRecorder, bufferSize, 4)
+//        var noiseRecorder = NoiseRecorder(auRecorder, auRecordByteArray.size, 4)
         cameraID = cameraManager.cameraIdList[0]
         toggle = findViewById(R.id.torchToggle)
         val bgAudio = backgroundAudioAnalysis(cameraID,cameraManager,noiseRecorder, false)
