@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
-import android.media.AudioFormat
+import android.media.AudioFormat.*
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
@@ -14,12 +14,61 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
 import android.widget.ToggleButton
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.*
+import kotlinx.coroutines.NonCancellable.cancel
+import kotlin.concurrent.thread
+import kotlin.coroutines.suspendCoroutine
+
+class backgroundAudioAnalysis(val cameraID: String, val cameraManager: CameraManager, val noiseRecorder: NoiseRecorder, var running: Boolean = false) {
+    @RequiresApi(Build.VERSION_CODES.M)
+    fun torchOn() {
+        cameraManager.setTorchMode(cameraID, true)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.M)
+    fun torchOff() {
+        cameraManager.setTorchMode(cameraID, false)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.M)
+    fun runOneCycle() {
+        var noiseLevel = noiseRecorder.noiseLevel
+        if (noiseLevel > 40.0)
+            torchOn()
+        else
+            torchOff()
+    }
+
+    var audioCoroutine = CoroutineScope(Dispatchers.Default)
+
+    @RequiresApi(Build.VERSION_CODES.M)
+    fun runContinuous() {
+        var job = audioCoroutine.launch {
+            while (running) {
+                Thread.sleep(300L)
+                runOneCycle()
+            }
+            torchOff()
+            println("torchOff() called in runContinuous()")
+        }
+    }
+
+
+    fun cancelJob() {
+        audioCoroutine.cancel()
+        running = false
+        println("audioCoroutine.cancel() called")
+        audioCoroutine = CoroutineScope(Dispatchers.Default)
+    }
+}
+
 class MainActivity() : AppCompatActivity() {
 
     object AudioPermissionHelper {
@@ -52,7 +101,7 @@ class MainActivity() : AppCompatActivity() {
 
     }
     var cameraID = ""
-
+    lateinit var toggle: ToggleButton
     /** Helper to ask camera permission.  */
     object CameraPermissionHelper {
         private const val CAMERA_PERMISSION_CODE = 0
@@ -108,6 +157,7 @@ class MainActivity() : AppCompatActivity() {
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onCreate(savedInstanceState: Bundle?) {
+        var isChecked = false
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -120,48 +170,56 @@ class MainActivity() : AppCompatActivity() {
             return
         }
         var cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val bufferSize = AudioRecord.getMinBufferSize(44100, AudioFormat.CHANNEL_IN_DEFAULT, AudioFormat.ENCODING_PCM_16BIT)
-        var auRecorder = AudioRecord.Builder().setBufferSizeInBytes(bufferSize).setAudioSource(MediaRecorder.AudioSource.MIC).setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(44100).setChannelMask(AudioFormat.CHANNEL_IN_DEFAULT).build()).build()
+        val bufferSize = AudioRecord.getMinBufferSize(44100, CHANNEL_IN_DEFAULT, ENCODING_PCM_16BIT)
+        var auRecorder = AudioRecord.Builder().setBufferSizeInBytes(bufferSize)
+            .setAudioSource(MediaRecorder.AudioSource.MIC).setAudioFormat(
+            Builder().setEncoding(ENCODING_PCM_16BIT).setSampleRate(44100).setChannelMask(
+                CHANNEL_IN_DEFAULT
+            ).build()
+        ).build()
         var auRecordByteArray = ByteArray(bufferSize)
-//        var audioTrack = AudioTrack(3, AudioFormat.SAMPLE_RATE_UNSPECIFIED, AudioFormat.CHANNEL_OUT_DEFAULT, AudioFormat.ENCODING_PCM_16BIT, bufferSize, 1 )
         var audioTrack = AudioTrack.Builder().build()
-//        var visualizer = Visualizer(0)
-        println("Before recording")
-        var noiseLevel = 0.0
+        var noiseRecorder = NoiseRecorder(auRecorder, auRecordByteArray.size)
         cameraID = cameraManager.cameraIdList[0]
-        val toggle: ToggleButton = findViewById(R.id.torchToggle)
+        toggle = findViewById(R.id.torchToggle)
+        val bgAudio = backgroundAudioAnalysis(cameraID,cameraManager,noiseRecorder,false)
         toggle.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                if (noiseLevel > 40.0)
-                    torchOn(cameraManager)
-//                auRecorder.startRecording()
-            } else {
-                torchOff(cameraManager)
-                //evaluate audio stream
-                var noiseRecorder = NoiseRecorder(auRecorder, auRecordByteArray.size)
-                noiseLevel = noiseRecorder.noiseLevel
+            if (isChecked)
+            {
+                bgAudio.running=true
+                bgAudio.runContinuous()
             }
-        }
-        println("End of oncreate")
-//        var auRecorder = AudioRecord.Builder().build()
+            else {
+                bgAudio.cancelJob()
+            }
+
+            }}
 
 
-
-//        var recorder = MediaRecorder()
-//        recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-//        recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_2_TS);
-//        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
-////        recorder.setOutputFile(PATH_NAME);
-//        recorder.prepare();
-//        recorder.start();   // Recording is now started
-//        recorder.stop();
-//        recorder.reset();   // You can reuse the object by going back to setAudioSource() step
-//        recorder.release(); // Now the object cannot be reused
-    }
-
-    fun setAudioSessionId(audiosessionId: Int) {
-
-    }
+//
+//    @RequiresApi(Build.VERSION_CODES.M)
+//    suspend fun threadManager(cameraManager: CameraManager, noiseRecorder: NoiseRecorder) {
+//        var toggleWrapperJob = coroutineScope {
+//            var job = launch {
+//                println("I'm working in thread ${Thread.currentThread().name}")
+//                while (true) {
+//                    runOneCycle(cameraManager, noiseRecorder)
+//                    Thread.sleep(500L)
+//                    if (Thread.interrupted())
+//                        break
+//                }
+//            }
+//        }
+//    }
+//
+//    @RequiresApi(Build.VERSION_CODES.M)
+//    fun runOneCycle(cameraManager: CameraManager, noiseRecorder:NoiseRecorder) {
+//            var noiseLevel = noiseRecorder.noiseLevel
+//            if (noiseLevel > 40.0)
+//                torchOn(cameraManager)
+//            else
+//                torchOff(cameraManager)
+//    }
 
     @RequiresApi(Build.VERSION_CODES.M)
     fun torchOn(cameraManager: CameraManager) {
@@ -175,3 +233,4 @@ class MainActivity() : AppCompatActivity() {
 
 
 }
+
